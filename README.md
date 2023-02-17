@@ -1,5 +1,7 @@
 # RenderOff
 
+![image](https://user-images.githubusercontent.com/20557088/219563734-dbfe5d81-8b49-4f64-a1ef-f491a720de6a.png)
+
 Mod for Unity online games that automatically disables rendering from all active cameras when the game's window is not active, reducing the GPU usage.
 This mod is well suited for laptops with weak integrated video graphics and is not suitable for gaming in VR mode.
 

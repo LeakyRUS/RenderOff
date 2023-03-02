@@ -2,71 +2,98 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Xml.Linq;
 using UnityEngine;
 
 namespace RenderOff
 {
     public class Mod : MelonMod
     {
-        private MelonPreferences_Category _approachCategory;
-        private MelonPreferences_Entry<string> _approachEntry;
+        private MelonPreferences_Category _methodCategory;
+        private MelonPreferences_Entry<string> _methodEntry;
 
-        private IOffMethod _approach;
+        private IOffMethod _selectedMethod;
+        private LinkedList<IOffMethod> _methods;
 
-        private LinkedList<IOffMethod> _approaches;
+        private string _GUIMessage = string.Empty;
+        private DateTime _GUIMessageCreated;
 
         public override void OnInitializeMelon()
         {
-            FillApproaches();
+            FillMethods();
 
-            _approachCategory = MelonPreferences.CreateCategory("RenderOff_Approach");
-            _approachEntry = _approachCategory.CreateEntry("Current", _approaches.First.Value.GetType().FullName);
+            _methodCategory = MelonPreferences.CreateCategory("RenderOff_Method");
+            _methodEntry = _methodCategory.CreateEntry("Current", _methods.First.Value.GetType().FullName);
         }
 
         public override void OnLateInitializeMelon()
         {
-            _approach = GetApproachFromName(_approachEntry.Value);
-
-            Application.focusChanged += _approach.FocusChanged;
+            SetUp();
         }
 
         public override void OnUpdate()
         {
             if (Input.GetKeyDown(KeyCode.KeypadMinus))
             {
-                ChangeApproach();
-                MelonLogger.Msg($"New method is {_approach.GetType().FullName.Split('.').Last()}");
+                ChangeMethod();
+                var msg = $"{_selectedMethod.GetType().FullName.Split('.').Last()} selected";
+                _GUIMessage = msg;
+                _GUIMessageCreated = DateTime.Now;
+                MelonLogger.Msg(msg);
             }
         }
 
-        private void FillApproaches()
+        public override void OnGUI()
         {
-            var types = System.Reflection.Assembly.GetAssembly(typeof(IOffMethod))?.GetTypes()
-                .Where(x => typeof(IOffMethod).IsAssignableFrom(x) && x.IsClass)
+            if (!string.IsNullOrWhiteSpace(_GUIMessage) && _GUIMessageCreated.AddSeconds(3) > DateTime.Now)
+            {
+                GUI.Label(new Rect(10, 10, 300, 25), _GUIMessage);
+            }
+            else
+            {
+                _GUIMessage = string.Empty;
+            }
+        }
+
+        public override void OnApplicationQuit()
+        {
+            Application.focusChanged -= _selectedMethod.FocusChanged;
+            _selectedMethod.FocusChanged(true);
+        }
+
+        private void FillMethods()
+        {
+            var types = typeof(IOffMethod).Assembly.GetTypes()
+                .Where(x => typeof(IOffMethod).IsAssignableFrom(x) && x.IsClass && !x.IsAbstract)
                 .Select(x => (IOffMethod)Activator.CreateInstance(x)).ToList();
 
-            _approaches = new LinkedList<IOffMethod>(types);
+            _methods = new LinkedList<IOffMethod>(types);
         }
 
-        private IOffMethod GetApproachFromName(string name)
+        private IOffMethod GetMethodFromName(string name)
         {
-            return _approaches.ToList().FirstOrDefault(x => x.GetType().FullName == name)
-                ?? _approaches.First.Value;
+            return _methods.ToList().FirstOrDefault(x => x.GetType().FullName == name)
+                ?? _methods.First.Value;
         }
 
-        private void ChangeApproach()
+        private void SetUp()
         {
-            IOffMethod foundApproach = _approach;
+            _selectedMethod = GetMethodFromName(_methodEntry.Value);
+
+            Application.focusChanged += _selectedMethod.FocusChanged;
+        }
+
+        private void ChangeMethod()
+        {
+            IOffMethod foundApproach = _selectedMethod;
             {
-                var node = _approaches.First;
+                var node = _methods.First;
 
                 while (node.Value != foundApproach)
                 {
                     var nextNode = node.Next;
                     if (nextNode == null)
                     {
-                        node = _approaches.First;
+                        node = _methods.First;
                         break;
                     }
                     else
@@ -75,13 +102,13 @@ namespace RenderOff
                     }
                 }
 
-                foundApproach = node.Next?.Value ?? _approaches.First.Value;
+                foundApproach = node.Next?.Value ?? _methods.First.Value;
             }
 
-            Application.focusChanged -= _approach.FocusChanged;
+            Application.focusChanged -= _selectedMethod.FocusChanged;
 
-            _approachEntry.Value = foundApproach.GetType().FullName;
-            OnLateInitializeMelon();
+            _methodEntry.Value = foundApproach.GetType().FullName;
+            SetUp();
 
             MelonPreferences.Save();
         }
